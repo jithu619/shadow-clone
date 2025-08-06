@@ -9,5 +9,8 @@
     "nodemailer": "^6.7.5",
     "dotenv": "^16.0.0",
     "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
