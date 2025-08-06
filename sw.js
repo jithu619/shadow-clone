@@ -3,9 +3,9 @@ self.addEventListener('install', event => {
     caches.open('voice-pwa-cache').then(cache => {
       return cache.addAll([
         '/voice-pwa/index.html',
+        '/voice-pwa/styles.css',
         '/voice-pwa/icon.png',
-        'https://cdn.tailwindcss.com',
-        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.4/dist/transformers.min.js'
+        '/voice-pwa/alert.mp3'
       ]);
     })
   );
@@ -17,4 +17,12 @@ self.addEventListener('fetch', event => {
       return response || fetch(event.request);
     })
   );
+});
+
+self.addEventListener('push', event => {
+  const data = event.data.json();
+  self.registration.showNotification(data.title, {
+    body: data.body,
+    icon: '/voice-pwa/icon.png'
+  });
 });
