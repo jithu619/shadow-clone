@@ -1,0 +1,149 @@
+body {
+  background-color: #1f2937;
+  color: #ffffff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  background-color: #374151;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  margin: auto;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  color: #60a5fa;
+  margin-bottom: 16px;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  background-color: #4b5563;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  margin-bottom: 16px;
+}
+
+button {
+  width: 100%;
+  padding: 8px;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #2563eb;
+}
+
+button.red {
+  background-color: #ef4444;
+}
+
+button.red:hover {
+  background-color: #dc2626;
+}
+
+#skipLoginBtn {
+  background-color: #6b7280;
+  margin-top: 8px;
+}
+
+#skipLoginBtn:hover {
+  background-color: #4b5563;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.header button {
+  width: auto;
+  background: none;
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.header button:hover {
+  color: #3b82f6;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  background-color: #4b5563;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+}
+
+.tab:first-child {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.tab:last-child {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.tab.active {
+  background-color: #3b82f6;
+}
+
+#items {
+  max-height: 256px;
+  overflow-y: auto;
+}
+
+.item {
+  padding: 8px;
+  background-color: #4b5563;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item button {
+  width: auto;
+  background: none;
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.item button:hover {
+  color: #3b82f6;
+}
+
+#status, #transcription, #loginStatus {
+  color: #9ca3af;
+  margin-bottom: 16px;
+}
+
+.hidden {
+  display: none;
+}

@@ -4,293 +4,499 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Voice Assistant</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/voice-pwa/manifest.json">
   <meta name="theme-color" content="#3b82f6">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.4/dist/transformers.min.js"></script>
+  <link rel="stylesheet" href="/voice-pwa/styles.css">
 </head>
-<body class="bg-gray-900 text-white min-h-screen flex flex-col p-4">
-  <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md mx-auto">
-    <h1 class="text-2xl font-bold mb-4 text-center text-blue-400">Voice Assistant</h1>
-    <button id="recordBtn" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4">Start Recording</button>
-    <div id="status" class="text-gray-400 mb-4"></div>
-    <div id="transcription" class="text-gray-200 mb-4"></div>
-    <div class="flex mb-4">
-      <button id="allTab" class="flex-1 bg-gray-700 py-2 rounded-l-lg text-white">All</button>
-      <button id="notesTab" class="flex-1 bg-gray-700 py-2 text-white">Notes</button>
-      <button id="remindersTab" class="flex-1 bg-gray-700 py-2 rounded-r-lg text-white">Reminders</button>
+<body>
+  <div id="loginPage" class="container">
+    <h1>Login / Register</h1>
+    <input id="emailInput" type="email" placeholder="Enter email">
+    <button id="sendOtpBtn">Send OTP</button>
+    <button id="skipLoginBtn">Skip Sign-In</button>
+    <div id="otpSection" class="hidden">
+      <input id="otpInput" type="text" placeholder="Enter OTP">
+      <button id="verifyOtpBtn">Verify OTP</button>
     </div>
-    <div id="items" class="space-y-2 max-h-64 overflow-y-auto"></div>
+    <div id="loginStatus"></div>
+  </div>
+  <div id="mainPage" class="container hidden">
+    <div class="header">
+      <h1>Voice Assistant</h1>
+      <button id="logoutBtn">Logout</button>
+    </div>
+    <button id="recordBtn">Start Recording</button>
+    <div id="status"></div>
+    <div id="transcription"></div>
+    <div class="tabs">
+      <button id="allTab">All</button>
+      <button id="notesTab">Notes</button>
+      <button id="remindersTab">Reminders</button>
+      <button id="historyTab">History</button>
+    </div>
+    <div id="items"></div>
+    <div id="editReminderForm" class="hidden">
+      <input id="editText" type="text" placeholder="Reminder text">
+      <input id="editTime" type="datetime-local">
+      <button id="saveEditBtn">Save</button>
+    </div>
   </div>
 
-  <script>
-    const recordBtn = document.getElementById('recordBtn');
-    const status = document.getElementById('status');
-    const transcription = document.getElementById('transcription');
-    const items = document.getElementById('items');
-    const allTab = document.getElementById('allTab');
-    const notesTab = document.getElementById('notesTab');
-    const remindersTab = document.getElementById('remindersTab');
-    let isRecording = false;
-    let mediaRecorder;
-    let recognition;
+  <script type="module">
+    import * as transformers from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.4/dist/transformers.min.js';
 
-    // Check secure context
-    if (!window.isSecureContext) {
-      status.textContent = 'Error: This app requires HTTPS or localhost. Please host on a secure server.';
-      recordBtn.disabled = true;
-      return;
-    }
+    function init() {
+      const loginPage = document.getElementById('loginPage');
+      const mainPage = document.getElementById('mainPage');
+      const emailInput = document.getElementById('emailInput');
+      const sendOtpBtn = document.getElementById('sendOtpBtn');
+      const skipLoginBtn = document.getElementById('skipLoginBtn');
+      const otpSection = document.getElementById('otpSection');
+      const otpInput = document.getElementById('otpInput');
+      const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+      const loginStatus = document.getElementById('loginStatus');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const recordBtn = document.getElementById('recordBtn');
+      const status = document.getElementById('status');
+      const transcription = document.getElementById('transcription');
+      const items = document.getElementById('items');
+      const allTab = document.getElementById('allTab');
+      const notesTab = document.getElementById('notesTab');
+      const remindersTab = document.getElementById('remindersTab');
+      const historyTab = document.getElementById('historyTab');
+      const editReminderForm = document.getElementById('editReminderForm');
+      const editText = document.getElementById('editText');
+      const editTime = document.getElementById('editTime');
+      const saveEditBtn = document.getElementById('saveEditBtn');
+      let isRecording = false;
+      let mediaRecorder;
+      let recognition;
+      let currentEmail = localStorage.getItem('currentEmail') || '';
+      let currentOtp = '';
+      const audio = new Audio('/voice-pwa/alert.mp3');
 
-    // Initialize Web Speech API
-    if ('webkitSpeechRecognition' in window) {
-      recognition = new webkitSpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-    } else {
-      status.textContent = 'Error: Web Speech API not supported. Please use Chrome.';
-      recordBtn.disabled = true;
-      return;
-    }
-
-    // Load HuggingFace model
-    let classifier;
-    (async () => {
-      try {
-        classifier = await transformers.pipeline('text-classification', 'distilbert-base-uncased');
-        status.textContent = 'AI model loaded';
-      } catch (err) {
-        status.textContent = 'Error loading AI model: ' + err.message;
+      // Check secure context
+      if (!window.isSecureContext) {
+        loginStatus.textContent = 'Error: This app requires HTTPS or localhost.';
+        sendOtpBtn.disabled = true;
+        skipLoginBtn.disabled = true;
+        recordBtn.disabled = true;
+        return;
       }
-    })();
 
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(() => {
-        console.log('Service Worker Registered');
-      }).catch(err => {
-        console.error('Service Worker Error:', err);
-      });
-    }
-
-    // Check notification permission
-    async function checkNotificationPermission() {
-      if (Notification.permission === 'default') {
-        const result = await Notification.requestPermission();
-        return result === 'granted';
+      // Initialize Web Speech API
+      if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+      } else {
+        loginStatus.textContent = 'Error: Web Speech API not supported. Please use Chrome.';
+        sendOtpBtn.disabled = true;
+        skipLoginBtn.disabled = true;
+        recordBtn.disabled = true;
+        return;
       }
-      return Notification.permission === 'granted';
-    }
 
-    // Load stored items
-    function loadItems(filter = 'all') {
-      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
-      items.innerHTML = '';
-      const filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
-      filtered.sort((a, b) => b.timestamp - a.timestamp);
-      filtered.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'p-2 bg-gray-700 rounded flex justify-between items-center';
-        div.innerHTML = `
-          <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}</span>
-          ${item.type === 'reminder' ? `<button class="editReminder text-blue-400 hover:underline" data-id="${item.id}">Edit</button>` : ''}
-        `;
-        items.appendChild(div);
-        if (item.type === 'reminder' && item.reminderTime > Date.now()) {
-          setTimeout(() => {
-            if (Notification.permission === 'granted') {
-              new Notification('Reminder', { body: item.text });
-            }
-          }, item.reminderTime - Date.now());
+      // Load HuggingFace model
+      let classifier;
+      (async () => {
+        try {
+          classifier = await transformers.pipeline('text-classification', 'optimum/distilbert-base-uncased-finetuned-sst-2-english');
+          status.textContent = 'AI model loaded';
+        } catch (err) {
+          status.textContent = 'Error loading AI model: ' + err.message;
+        }
+      })();
+
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/voice-pwa/sw.js').then(() => {
+          console.log('Service Worker Registered');
+        }).catch(err => {
+          console.error('Service Worker Error:', err);
+        });
+      }
+
+      // Check notification permission
+      async function checkNotificationPermission() {
+        if (Notification.permission === 'default') {
+          const result = await Notification.requestPermission();
+          return result === 'granted';
+        }
+        return Notification.permission === 'granted';
+      }
+
+      // Login handling
+      if (currentEmail) {
+        loginPage.classList.add('hidden');
+        mainPage.classList.remove('hidden');
+        loadItems();
+      } else {
+        loginPage.classList.remove('hidden');
+        mainPage.classList.add('hidden');
+      }
+
+      sendOtpBtn.addEventListener('click', async () => {
+        const email = emailInput.value.trim();
+        if (!email || !email.includes('@')) {
+          loginStatus.textContent = 'Please enter a valid email.';
+          return;
+        }
+        try {
+          const response = await fetch('https://your-render-service.onrender.com/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const data = await response.json();
+          if (data.success) {
+            currentOtp = data.otp;
+            loginStatus.textContent = 'OTP sent to email.';
+            otpSection.classList.remove('hidden');
+          } else {
+            loginStatus.textContent = 'Error sending OTP: ' + data.message;
+          }
+        } catch (err) {
+          loginStatus.textContent = 'Error connecting to server: ' + err.message;
         }
       });
 
-      // Add edit reminder handlers
-      document.querySelectorAll('.editReminder').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = btn.dataset.id;
+      skipLoginBtn.addEventListener('click', () => {
+        currentEmail = 'guest';
+        localStorage.setItem('currentEmail', currentEmail);
+        loginPage.classList.add('hidden');
+        mainPage.classList.remove('hidden');
+        loadItems();
+      });
+
+      verifyOtpBtn.addEventListener('click', async () => {
+        const otp = otpInput.value.trim();
+        try {
+          const response = await fetch('https://your-render-service.onrender.com/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailInput.value.trim(), otp })
+          });
+          const data = await response.json();
+          if (data.success) {
+            currentEmail = emailInput.value.trim();
+            localStorage.setItem('currentEmail', currentEmail);
+            loginPage.classList.add('hidden');
+            mainPage.classList.remove('hidden');
+            loadItems();
+            loginStatus.textContent = '';
+          } else {
+            loginStatus.textContent = 'Invalid OTP.';
+          }
+        } catch (err) {
+          loginStatus.textContent = 'Error verifying OTP: ' + err.message;
+        }
+      });
+
+      logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem('currentEmail');
+        currentEmail = '';
+        loginPage.classList.add('hidden');
+        mainPage.classList.add('hidden');
+        items.innerHTML = '';
+        emailInput.value = '';
+        otpInput.value = '';
+        otpSection.classList.add('hidden');
+      });
+
+      // Load stored items
+      function loadItems(filter = 'all') {
+        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+        items.innerHTML = '';
+        let filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
+        if (filter === 'history') {
+          filtered = stored.flatMap(item =>
+            item.editHistory.map(history => ({
+              ...item,
+              text: history.text,
+              reminderTime: history.reminderTime,
+              editedAt: history.editedAt
+            }))
+          );
+        }
+        filtered.sort((a, b) => (b.editedAt || b.timestamp) - (a.editedAt || a.timestamp));
+        filtered.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'item';
+          div.innerHTML = `
+            <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}${item.editedAt ? ` (Edited: ${new Date(item.editedAt).toLocaleString()})` : ''}</span>
+            ${item.type === 'reminder' && !item.editedAt && item.reminderTime > Date.now() ? `
+              <div>
+                <button class="editReminder" data-id="${item.id}">Edit</button>
+                <button class="addToCalendar" data-id="${item.id}">Add to Calendar</button>
+              </div>` : ''}
+          `;
+          items.appendChild(div);
+          if (item.type === 'reminder' && item.reminderTime > Date.now()) {
+            setTimeout(() => {
+              if (Notification.permission === 'granted' && document.visibilityState === 'visible') {
+                new Notification('Reminder', { body: item.text });
+                audio.play().catch(err => console.error('Audio error:', err));
+              }
+            }, item.reminderTime - Date.now());
+          }
+        });
+
+        // Edit reminder handlers
+        document.querySelectorAll('.editReminder').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const item = stored.find(i => i.id == id);
+            editText.value = item.text;
+            editTime.value = item.reminderTime ? new Date(item.reminderTime).toISOString().slice(0, 16) : '';
+            editReminderForm.dataset.id = id;
+            editReminderForm.classList.remove('hidden');
+            items.classList.add('hidden');
+          });
+        });
+
+        // Calendar handlers
+        document.querySelectorAll('.addToCalendar').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const item = stored.find(i => i.id == id);
+            if (item.reminderTime) {
+              const start = new Date(item.reminderTime);
+              const end = new Date(start.getTime() + 30 * 60 * 1000);
+              const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(item.text)}&dates=${start.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${end.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+              window.open(url, '_blank');
+            }
+          });
+        });
+      }
+
+      // Save item to localStorage
+      function saveItem(item) {
+        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+        item.editHistory = [];
+        stored.push(item);
+        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
+        loadItems();
+      }
+
+      // Update reminder
+      async function updateReminder(id, text, reminderTime, isManual = false) {
+        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+        const item = stored.find(i => i.id == id);
+        if (!item) return;
+
+        if (!item.originalText) item.originalText = item.text;
+        item.editHistory.push({
+          text: item.text,
+          reminderTime: item.reminderTime,
+          editedAt: Date.now()
+        });
+        item.text = text;
+        item.reminderTime = reminderTime;
+        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
+        loadItems();
+        if (reminderTime && Notification.permission === 'granted') {
+          setTimeout(() => {
+            if (document.visibilityState === 'visible') {
+              new Notification('Reminder', { body: item.text });
+              audio.play().catch(err => console.error('Audio error:', err));
+            }
+          }, item.reminderTime - Date.now());
+        }
+        transcription.textContent = `Reminder updated: ${text}`;
+        if (isManual) {
+          editReminderForm.classList.add('hidden');
+          items.classList.remove('hidden');
+        }
+      }
+
+      // Manual edit handler
+      saveEditBtn.addEventListener('click', () => {
+        const id = editReminderForm.dataset.id;
+        const text = editText.value.trim();
+        const reminderTime = new Date(editTime.value).getTime();
+        if (!text || !reminderTime || reminderTime <= Date.now()) {
+          status.textContent = 'Invalid text or past date.';
+          return;
+        }
+        updateReminder(id, text, reminderTime, true);
+      });
+
+      // Process text with AI
+      async function processText(text) {
+        const lowerText = text.toLowerCase();
+        let type = 'note';
+        let reminderTime = null;
+
+        // Check for "remind" keyword
+        if (lowerText.includes('remind')) {
+          type = 'reminder';
+        } else if (classifier) {
+          try {
+            const result = await classifier(lowerText);
+            type = result[0].label.includes('POSITIVE') ? 'reminder' : 'note';
+          } catch (err) {
+            status.textContent = 'AI processing error: ' + err.message;
+          }
+        }
+
+        // Extract date/time
+        const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+        if (timeMatch) {
+          type = 'reminder';
+          let time;
+          if (timeMatch[0].includes('tomorrow')) {
+            time = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          } else if (timeMatch[0].includes('today')) {
+            time = new Date();
+          } else if (timeMatch[0].includes('next')) {
+            time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          } else if (timeMatch[0].includes('in')) {
+            const num = parseInt(timeMatch[0].match(/\d+/)[0]);
+            const unit = timeMatch[0].match(/hour|day|week/)[0];
+            const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
+            time = new Date(Date.now() + num * multiplier * 1000);
+          } else if (timeMatch[0].includes('at')) {
+            time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
+            if (isNaN(time)) time = new Date();
+          }
+          reminderTime = time.getTime();
+        }
+
+        const item = {
+          id: Date.now(),
+          type,
+          text,
+          timestamp: Date.now(),
+          reminderTime,
+          originalText: text,
+          editHistory: []
+        };
+        saveItem(item);
+        transcription.textContent = `Saved as ${item.type}: ${text}`;
+      }
+
+      // Handle recording
+      recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+          const notificationsAvailable = await checkNotificationPermission();
+          if (!notificationsAvailable) {
+            status.textContent = 'Notifications not enabled. Reminders may not show.';
+          }
+
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            recognition.start();
+
+            isRecording = true;
+            recordBtn.textContent = 'Stop Recording';
+            recordBtn.className = 'button red';
+            status.textContent = 'Recording...';
+
+            recognition.onresult = event => {
+              const text = event.results[0][0].transcript;
+              transcription.textContent = `Transcribed: ${text}`;
+              processText(text);
+            };
+
+            recognition.onerror = event => {
+              status.textContent = `Speech recognition error: ${event.error}`;
+            };
+
+            recognition.onend = () => {
+              if (isRecording) {
+                mediaRecorder.stop();
+                stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.className = 'button';
+                status.textContent = '';
+              }
+            };
+          } catch (err) {
+            status.textContent = `Error accessing microphone: ${err.message}`;
+          }
+        } else {
+          mediaRecorder.stop();
+          recognition.stop();
+        }
+      });
+
+      // Voice edit handler
+      document.addEventListener('click', event => {
+        if (event.target.classList.contains('editReminder')) {
+          const id = event.target.dataset.id;
           status.textContent = 'Speak new reminder details...';
           recognition.start();
           recognition.onresult = event => {
             const text = event.results[0][0].transcript;
-            updateReminder(id, text);
+            const lowerText = text.toLowerCase();
+            let reminderTime = null;
+            const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+            if (timeMatch) {
+              let time;
+              if (timeMatch[0].includes('tomorrow')) {
+                time = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              } else if (timeMatch[0].includes('today')) {
+                time = new Date();
+              } else if (timeMatch[0].includes('next')) {
+                time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+              } else if (timeMatch[0].includes('in')) {
+                const num = parseInt(timeMatch[0].match(/\d+/)[0]);
+                const unit = timeMatch[0].match(/hour|day|week/)[0];
+                const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
+                time = new Date(Date.now() + num * multiplier * 1000);
+              } else if (timeMatch[0].includes('at')) {
+                time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
+                if (isNaN(time)) time = new Date();
+              }
+              reminderTime = time.getTime();
+            }
+            updateReminder(id, text, reminderTime);
             recognition.stop();
           };
-        });
+        }
       });
+
+      // Tab navigation
+      allTab.addEventListener('click', () => {
+        allTab.className = 'tab active';
+        notesTab.className = 'tab';
+        remindersTab.className = 'tab';
+        historyTab.className = 'tab';
+        loadItems('all');
+      });
+      notesTab.addEventListener('click', () => {
+        allTab.className = 'tab';
+        notesTab.className = 'tab active';
+        remindersTab.className = 'tab';
+        historyTab.className = 'tab';
+        loadItems('note');
+      });
+      remindersTab.addEventListener('click', () => {
+        allTab.className = 'tab';
+        notesTab.className = 'tab';
+        remindersTab.className = 'tab active';
+        historyTab.className = 'tab';
+        loadItems('reminder');
+      });
+      historyTab.addEventListener('click', () => {
+        allTab.className = 'tab';
+        notesTab.className = 'tab';
+        remindersTab.className = 'tab';
+        historyTab.className = 'tab active';
+        loadItems('history');
+      });
+
+      // Load items on page load
+      if (currentEmail) loadItems();
     }
 
-    // Save item to localStorage
-    function saveItem(item) {
-      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
-      stored.push(item);
-      localStorage.setItem('voiceItems', JSON.stringify(stored));
-      loadItems();
-    }
-
-    // Update reminder
-    async function updateReminder(id, text) {
-      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
-      const item = stored.find(i => i.id == id);
-      if (!item) return;
-
-      let reminderTime = null;
-      const lowerText = text.toLowerCase();
-      const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
-      if (timeMatch) {
-        let time;
-        if (timeMatch[0].includes('tomorrow')) {
-          time = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        } else if (timeMatch[0].includes('today')) {
-          time = new Date();
-        } else if (timeMatch[0].includes('next')) {
-          time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        } else if (timeMatch[0].includes('in')) {
-          const num = parseInt(timeMatch[0].match(/\d+/)[0]);
-          const unit = timeMatch[0].match(/hour|day|week/)[0];
-          const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
-          time = new Date(Date.now() + num * multiplier * 1000);
-        } else if (timeMatch[0].includes('at')) {
-          time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
-          if (isNaN(time)) time = new Date();
-        }
-        reminderTime = time.getTime();
-      }
-
-      item.text = text;
-      item.reminderTime = reminderTime;
-      localStorage.setItem('voiceItems', JSON.stringify(stored));
-      loadItems();
-      if (reminderTime && Notification.permission === 'granted') {
-        setTimeout(() => {
-          new Notification('Reminder', { body: item.text });
-        }, reminderTime - Date.now());
-      }
-      transcription.textContent = `Reminder updated: ${text}`;
-    }
-
-    // Process text with AI
-    async function processText(text) {
-      const lowerText = text.toLowerCase();
-      let type = 'note';
-      let reminderTime = null;
-
-      // AI-based classification
-      if (classifier) {
-        try {
-          const result = await classifier(lowerText);
-          type = result[0].label.includes('POSITIVE') ? 'reminder' : 'note';
-        } catch (err) {
-          status.textContent = 'AI processing error: ' + err.message;
-        }
-      }
-
-      // Extract date/time
-      const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
-      if (timeMatch) {
-        type = 'reminder';
-        let time;
-        if (timeMatch[0].includes('tomorrow')) {
-          time = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        } else if (timeMatch[0].includes('today')) {
-          time = new Date();
-        } else if (timeMatch[0].includes('next')) {
-          time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        } else if (timeMatch[0].includes('in')) {
-          const num = parseInt(timeMatch[0].match(/\d+/)[0]);
-          const unit = timeMatch[0].match(/hour|day|week/)[0];
-          const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
-          time = new Date(Date.now() + num * multiplier * 1000);
-        } else if (timeMatch[0].includes('at')) {
-          time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
-          if (isNaN(time)) time = new Date();
-        }
-        reminderTime = time.getTime();
-      }
-
-      const item = {
-        id: Date.now(),
-        type,
-        text,
-        timestamp: Date.now(),
-        reminderTime
-      };
-      saveItem(item);
-      transcription.textContent = `Saved as ${item.type}: ${text}`;
-    }
-
-    // Handle recording
-    recordBtn.addEventListener('click', async () => {
-      if (!isRecording) {
-        // Check notification permission
-        const notificationsAvailable = await checkNotificationPermission();
-        if (!notificationsAvailable) {
-          status.textContent = 'Notifications not enabled. Reminders may not show.';
-        }
-
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.start();
-          recognition.start();
-
-          isRecording = true;
-          recordBtn.textContent = 'Stop Recording';
-          recordBtn.className = 'w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 mb-4';
-          status.textContent = 'Recording...';
-
-          recognition.onresult = event => {
-            const text = event.results[0][0].transcript;
-            transcription.textContent = `Transcribed: ${text}`;
-            processText(text);
-          };
-
-          recognition.onerror = event => {
-            status.textContent = `Speech recognition error: ${event.error}`;
-          };
-
-          recognition.onend = () => {
-            if (isRecording) {
-              mediaRecorder.stop();
-              stream.getTracks().forEach(track => track.stop());
-              isRecording = false;
-              recordBtn.textContent = 'Start Recording';
-              recordBtn.className = 'w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4';
-              status.textContent = '';
-            }
-          };
-        } catch (err) {
-          status.textContent = `Error accessing microphone: ${err.message}`;
-        }
-      } else {
-        mediaRecorder.stop();
-        recognition.stop();
-      }
-    });
-
-    // Tab navigation
-    allTab.addEventListener('click', () => {
-      allTab.className = 'flex-1 bg-blue-500 text-white py-2 rounded-l-lg';
-      notesTab.className = 'flex-1 bg-gray-700 py-2 text-white';
-      remindersTab.className = 'flex-1 bg-gray-700 py-2 rounded-r-lg text-white';
-      loadItems('all');
-    });
-    notesTab.addEventListener('click', () => {
-      allTab.className = 'flex-1 bg-gray-700 py-2 rounded-l-lg text-white';
-      notesTab.className = 'flex-1 bg-blue-500 text-white py-2';
-      remindersTab.className = 'flex-1 bg-gray-700 py-2 rounded-r-lg text-white';
-      loadItems('note');
-    });
-    remindersTab.addEventListener('click', () => {
-      allTab.className = 'flex-1 bg-gray-700 py-2 rounded-l-lg text-white';
-      notesTab.className = 'flex-1 bg-gray-700 py-2 text-white';
-      remindersTab.className = 'flex-1 bg-blue-500 text-white py-2 rounded-r-lg';
-      loadItems('reminder');
-    });
-
-    // Load items on page load
-    loadItems();
+    // Initialize app
+    init();
   </script>
 </body>
 </html>
