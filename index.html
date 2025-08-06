@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Assistant</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.4/dist/transformers.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col p-4">
+  <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md mx-auto">
+    <h1 class="text-2xl font-bold mb-4 text-center text-blue-400">Voice Assistant</h1>
+    <button id="recordBtn" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4">Start Recording</button>
+    <div id="status" class="text-gray-400 mb-4"></div>
+    <div id="transcription" class="text-gray-200 mb-4"></div>
+    <div class="flex mb-4">
+      <button id="allTab" class="flex-1 bg-gray-700 py-2 rounded-l-lg text-white">All</button>
+      <button id="notesTab" class="flex-1 bg-gray-700 py-2 text-white">Notes</button>
+      <button id="remindersTab" class="flex-1 bg-gray-700 py-2 rounded-r-lg text-white">Reminders</button>
+    </div>
+    <div id="items" class="space-y-2 max-h-64 overflow-y-auto"></div>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const status = document.getElementById('status');
+    const transcription = document.getElementById('transcription');
+    const items = document.getElementById('items');
+    const allTab = document.getElementById('allTab');
+    const notesTab = document.getElementById('notesTab');
+    const remindersTab = document.getElementById('remindersTab');
+    let isRecording = false;
+    let mediaRecorder;
+    let recognition;
+
+    // Check secure context
+    if (!window.isSecureContext) {
+      status.textContent = 'Error: This app requires HTTPS or localhost. Please host on a secure server.';
+      recordBtn.disabled = true;
+      return;
+    }
+
+    // Initialize Web Speech API
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+    } else {
+      status.textContent = 'Error: Web Speech API not supported. Please use Chrome.';
+      recordBtn.disabled = true;
+      return;
+    }
+
+    // Load HuggingFace model
+    let classifier;
+    (async () => {
+      try {
+        classifier = await transformers.pipeline('text-classification', 'distilbert-base-uncased');
+        status.textContent = 'AI model loaded';
+      } catch (err) {
+        status.textContent = 'Error loading AI model: ' + err.message;
+      }
+    })();
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(() => {
+        console.log('Service Worker Registered');
+      }).catch(err => {
+        console.error('Service Worker Error:', err);
+      });
+    }
+
+    // Check notification permission
+    async function checkNotificationPermission() {
+      if (Notification.permission === 'default') {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+      }
+      return Notification.permission === 'granted';
+    }
+
+    // Load stored items
+    function loadItems(filter = 'all') {
+      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
+      items.innerHTML = '';
+      const filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
+      filtered.sort((a, b) => b.timestamp - a.timestamp);
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'p-2 bg-gray-700 rounded flex justify-between items-center';
+        div.innerHTML = `
+          <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}</span>
+          ${item.type === 'reminder' ? `<button class="editReminder text-blue-400 hover:underline" data-id="${item.id}">Edit</button>` : ''}
+        `;
+        items.appendChild(div);
+        if (item.type === 'reminder' && item.reminderTime > Date.now()) {
+          setTimeout(() => {
+            if (Notification.permission === 'granted') {
+              new Notification('Reminder', { body: item.text });
+            }
+          }, item.reminderTime - Date.now());
+        }
+      });
+
+      // Add edit reminder handlers
+      document.querySelectorAll('.editReminder').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          status.textContent = 'Speak new reminder details...';
+          recognition.start();
+          recognition.onresult = event => {
+            const text = event.results[0][0].transcript;
+            updateReminder(id, text);
+            recognition.stop();
+          };
+        });
+      });
+    }
+
+    // Save item to localStorage
+    function saveItem(item) {
+      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
+      stored.push(item);
+      localStorage.setItem('voiceItems', JSON.stringify(stored));
+      loadItems();
+    }
+
+    // Update reminder
+    async function updateReminder(id, text) {
+      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
+      const item = stored.find(i => i.id == id);
+      if (!item) return;
+
+      let reminderTime = null;
+      const lowerText = text.toLowerCase();
+      const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+      if (timeMatch) {
+        let time;
+        if (timeMatch[0].includes('tomorrow')) {
+          time = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        } else if (timeMatch[0].includes('today')) {
+          time = new Date();
+        } else if (timeMatch[0].includes('next')) {
+          time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        } else if (timeMatch[0].includes('in')) {
+          const num = parseInt(timeMatch[0].match(/\d+/)[0]);
+          const unit = timeMatch[0].match(/hour|day|week/)[0];
+          const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
+          time = new Date(Date.now() + num * multiplier * 1000);
+        } else if (timeMatch[0].includes('at')) {
+          time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
+          if (isNaN(time)) time = new Date();
+        }
+        reminderTime = time.getTime();
+      }
+
+      item.text = text;
+      item.reminderTime = reminderTime;
+      localStorage.setItem('voiceItems', JSON.stringify(stored));
+      loadItems();
+      if (reminderTime && Notification.permission === 'granted') {
+        setTimeout(() => {
+          new Notification('Reminder', { body: item.text });
+        }, reminderTime - Date.now());
+      }
+      transcription.textContent = `Reminder updated: ${text}`;
+    }
+
+    // Process text with AI
+    async function processText(text) {
+      const lowerText = text.toLowerCase();
+      let type = 'note';
+      let reminderTime = null;
+
+      // AI-based classification
+      if (classifier) {
+        try {
+          const result = await classifier(lowerText);
+          type = result[0].label.includes('POSITIVE') ? 'reminder' : 'note';
+        } catch (err) {
+          status.textContent = 'AI processing error: ' + err.message;
+        }
+      }
+
+      // Extract date/time
+      const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+      if (timeMatch) {
+        type = 'reminder';
+        let time;
+        if (timeMatch[0].includes('tomorrow')) {
+          time = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        } else if (timeMatch[0].includes('today')) {
+          time = new Date();
+        } else if (timeMatch[0].includes('next')) {
+          time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        } else if (timeMatch[0].includes('in')) {
+          const num = parseInt(timeMatch[0].match(/\d+/)[0]);
+          const unit = timeMatch[0].match(/hour|day|week/)[0];
+          const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
+          time = new Date(Date.now() + num * multiplier * 1000);
+        } else if (timeMatch[0].includes('at')) {
+          time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
+          if (isNaN(time)) time = new Date();
+        }
+        reminderTime = time.getTime();
+      }
+
+      const item = {
+        id: Date.now(),
+        type,
+        text,
+        timestamp: Date.now(),
+        reminderTime
+      };
+      saveItem(item);
+      transcription.textContent = `Saved as ${item.type}: ${text}`;
+    }
+
+    // Handle recording
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        // Check notification permission
+        const notificationsAvailable = await checkNotificationPermission();
+        if (!notificationsAvailable) {
+          status.textContent = 'Notifications not enabled. Reminders may not show.';
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+          recognition.start();
+
+          isRecording = true;
+          recordBtn.textContent = 'Stop Recording';
+          recordBtn.className = 'w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 mb-4';
+          status.textContent = 'Recording...';
+
+          recognition.onresult = event => {
+            const text = event.results[0][0].transcript;
+            transcription.textContent = `Transcribed: ${text}`;
+            processText(text);
+          };
+
+          recognition.onerror = event => {
+            status.textContent = `Speech recognition error: ${event.error}`;
+          };
+
+          recognition.onend = () => {
+            if (isRecording) {
+              mediaRecorder.stop();
+              stream.getTracks().forEach(track => track.stop());
+              isRecording = false;
+              recordBtn.textContent = 'Start Recording';
+              recordBtn.className = 'w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4';
+              status.textContent = '';
+            }
+          };
+        } catch (err) {
+          status.textContent = `Error accessing microphone: ${err.message}`;
+        }
+      } else {
+        mediaRecorder.stop();
+        recognition.stop();
+      }
+    });
+
+    // Tab navigation
+    allTab.addEventListener('click', () => {
+      allTab.className = 'flex-1 bg-blue-500 text-white py-2 rounded-l-lg';
+      notesTab.className = 'flex-1 bg-gray-700 py-2 text-white';
+      remindersTab.className = 'flex-1 bg-gray-700 py-2 rounded-r-lg text-white';
+      loadItems('all');
+    });
+    notesTab.addEventListener('click', () => {
+      allTab.className = 'flex-1 bg-gray-700 py-2 rounded-l-lg text-white';
+      notesTab.className = 'flex-1 bg-blue-500 text-white py-2';
+      remindersTab.className = 'flex-1 bg-gray-700 py-2 rounded-r-lg text-white';
+      loadItems('note');
+    });
+    remindersTab.addEventListener('click', () => {
+      allTab.className = 'flex-1 bg-gray-700 py-2 rounded-l-lg text-white';
+      notesTab.className = 'flex-1 bg-gray-700 py-2 text-white';
+      remindersTab.className = 'flex-1 bg-blue-500 text-white py-2 rounded-r-lg';
+      loadItems('reminder');
+    });
+
+    // Load items on page load
+    loadItems();
+  </script>
+</body>
+</html>

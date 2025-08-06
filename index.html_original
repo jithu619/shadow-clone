@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Notes & Reminders</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+  <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">Voice Notes & Reminders</h1>
+    <button id="recordBtn" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4">Start Recording</button>
+    <div id="status" class="text-gray-600 mb-4"></div>
+    <div id="transcription" class="text-gray-800 mb-4"></div>
+    <div id="items" class="space-y-2"></div>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const status = document.getElementById('status');
+    const transcription = document.getElementById('transcription');
+    const items = document.getElementById('items');
+    let isRecording = false;
+    let mediaRecorder;
+    let recognition;
+
+    // Initialize Web Speech API
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+    } else {
+      alert('Web Speech API not supported in this browser. Please use Chrome.');
+    }
+
+    // Load stored items
+    function loadItems() {
+      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
+      items.innerHTML = '';
+      stored.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'p-2 bg-gray-100 rounded';
+        div.textContent = `${item.type.toUpperCase()}: ${item.text}${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}`;
+        items.appendChild(div);
+        if (item.type === 'reminder' && item.reminderTime > Date.now()) {
+          setTimeout(() => {
+            new Notification('Reminder', { body: item.text });
+          }, item.reminderTime - Date.now());
+        }
+      });
+    }
+
+    // Save item to localStorage
+    function saveItem(item) {
+      const stored = JSON.parse(localStorage.getItem('voiceItems') || '[]');
+      stored.push(item);
+      localStorage.setItem('voiceItems', JSON.stringify(stored));
+      loadItems();
+    }
+
+    // Categorize and process text
+    function processText(text) {
+      const lowerText = text.toLowerCase();
+      const noteKeywords = ['note', 'idea', 'thought'];
+      const reminderKeywords = ['remind', 'tomorrow', 'today', 'at ', 'next ', 'in '];
+      let isReminder = reminderKeywords.some(keyword => lowerText.includes(keyword));
+      let reminderTime = null;
+
+      // Extract date/time for reminders
+      if (isReminder) {
+        const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+        if (timeMatch) {
+          let time;
+          if (timeMatch[0].includes('tomorrow')) {
+            time = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          } else if (timeMatch[0].includes('today')) {
+            time = new Date();
+          } else if (timeMatch[0].includes('next')) {
+            time = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          } else if (timeMatch[0].includes('in')) {
+            const num = parseInt(timeMatch[0].match(/\d+/)[0]);
+            const unit = timeMatch[0].match(/hour|day|week/)[0];
+            const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
+            time = new Date(Date.now() + num * multiplier * 1000);
+          } else if (timeMatch[0].includes('at')) {
+            time = new Date(Date.parse(timeMatch[0].replace('at ', '')));
+            if (isNaN(time)) time = new Date();
+          }
+          reminderTime = time.getTime();
+        } else {
+          isReminder = false; // Fallback to note if no valid time
+        }
+      }
+
+      const item = {
+        id: Date.now(),
+        type: isReminder ? 'reminder' : 'note',
+        text,
+        timestamp: Date.now(),
+        reminderTime: isReminder ? reminderTime : null
+      };
+      saveItem(item);
+      transcription.textContent = `Saved as ${item.type}: ${text}`;
+    }
+
+    // Handle recording
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        // Request notification permission
+        if (Notification.permission !== 'granted') {
+          await Notification.requestPermission();
+        }
+
+        // Start recording
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+          recognition.start();
+
+          isRecording = true;
+          recordBtn.textContent = 'Stop Recording';
+          recordBtn.className = 'w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 mb-4';
+          status.textContent = 'Recording...';
+
+          recognition.onresult = event => {
+            const text = event.results[0][0].transcript;
+            transcription.textContent = `Transcribed: ${text}`;
+            processText(text);
+          };
+
+          recognition.onerror = event => {
+            status.textContent = `Error: ${event.error}`;
+          };
+
+          recognition.onend = () => {
+            if (isRecording) {
+              mediaRecorder.stop();
+              stream.getTracks().forEach(track => track.stop());
+              isRecording = false;
+              recordBtn.textContent = 'Start Recording';
+              recordBtn.className = 'w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-4';
+              status.textContent = '';
+            }
+          };
+        } catch (err) {
+          status.textContent = `Error accessing microphone: ${err.message}`;
+        }
+      } else {
+        mediaRecorder.stop();
+        recognition.stop();
+      }
+    });
+
+    // Load items on page load
+    loadItems();
+  </script>
+</body>
+</html>
