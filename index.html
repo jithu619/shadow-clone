@@ -144,7 +144,7 @@
           return;
         }
         try {
-          const response = await fetch('https://your-render-service.onrender.com/send-otp', {
+          const response = await fetch('https://shadow-clone.onrender.com/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
@@ -173,7 +173,7 @@
       verifyOtpBtn.addEventListener('click', async () => {
         const otp = otpInput.value.trim();
         try {
-          const response = await fetch('https://your-render-service.onrender.com/verify-otp', {
+          const response = await fetch('https://shadow-clone.onrender.com/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: emailInput.value.trim(), otp })
