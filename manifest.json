@@ -2,13 +2,13 @@
   "name": "Voice Assistant",
   "short_name": "Voice App",
   "description": "Voice-based notes and reminders app",
-  "start_url": "/voice-pwa/index.html",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#1f2937",
   "theme_color": "#3b82f6",
   "icons": [
     {
-      "src": "/voice-pwa/icon.png",
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }
