@@ -8,13 +8,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Root route for testing
+app.get('/', (req, res) => {
+  res.json({ message: 'Voice Assistant Backend is running' });
+});
+
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
-  secure: false, // Use TLS
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS // App Password
+    pass: process.env.EMAIL_PASS
   }
 });
 
@@ -37,7 +42,7 @@ app.post('/send-otp', async (req, res) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    res.json({ success: true, otp }); // Return OTP for local testing
+    res.json({ success: true, otp });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
