@@ -2,10 +2,10 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open('voice-pwa-cache').then(cache => {
       return cache.addAll([
-        '/voice-pwa/index.html',
-        '/voice-pwa/styles.css',
-        '/voice-pwa/icon.png',
-        '/voice-pwa/alert.mp3'
+        'index.html',
+        'styles.css',
+        'icon.png',
+        'alert.mp3'
       ]);
     })
   );
@@ -23,6 +23,6 @@ self.addEventListener('push', event => {
   const data = event.data.json();
   self.registration.showNotification(data.title, {
     body: data.body,
-    icon: '/voice-pwa/icon.png'
+    icon: 'icon.png'
   });
 });

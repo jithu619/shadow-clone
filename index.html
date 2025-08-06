@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Voice Assistant</title>
-  <link rel="manifest" href="/voice-pwa/manifest.json">
+  <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#3b82f6">
-  <link rel="stylesheet" href="/voice-pwa/styles.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="loginPage" class="container">
@@ -73,7 +73,7 @@
       let recognition;
       let currentEmail = localStorage.getItem('currentEmail') || '';
       let currentOtp = '';
-      const audio = new Audio('/voice-pwa/alert.mp3');
+      const audio = new Audio('alert.mp3');
 
       // Check secure context
       if (!window.isSecureContext) {
@@ -111,7 +111,7 @@
 
       // Register service worker
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/voice-pwa/sw.js').then(() => {
+        navigator.serviceWorker.register('sw.js').then(() => {
           console.log('Service Worker Registered');
         }).catch(err => {
           console.error('Service Worker Error:', err);
