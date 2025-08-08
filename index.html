@@ -86,6 +86,9 @@
         status.textContent = `Microphone permission: ${result.state}`;
         if (result.state !== 'granted') {
           status.textContent += ' Please allow microphone access in browser settings.';
+          navigator.mediaDevices.getUserMedia({ audio: true }).catch(err => {
+            status.textContent = `Microphone access denied: ${err.message}`;
+          });
         }
       }).catch(err => {
         status.textContent = `Microphone permission error: ${err.message}`;
@@ -241,7 +244,7 @@
       logoutBtn.addEventListener('click', () => {
         localStorage.removeItem('currentEmail');
         currentEmail = '';
-        loginPage.classList.add('hidden');
+        loginPage.classList.remove('hidden');
         mainPage.classList.add('hidden');
         items.innerHTML = '';
         emailInput.value = '';
@@ -491,7 +494,7 @@
           }
         }
 
-        const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+        const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)|\d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
         if (timeMatch) {
           type = 'reminder';
           let time;
@@ -509,8 +512,8 @@
             const unit = timeMatch[0].match(/hour|day|week/)[0];
             const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
             time = new Date(now.getTime() + num * multiplier * 1000);
-          } else if (timeMatch[0].includes('at')) {
-            const timeStr = timeMatch[0].replace('at ', '').trim();
+          } else if (timeMatch[0].match(/\d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)/i)) {
+            const timeStr = timeMatch[0].trim();
             time = new Date(`${now.toDateString()} ${timeStr}`);
             if (isNaN(time.getTime())) {
               time = new Date();
@@ -519,6 +522,7 @@
             }
           }
           reminderTime = time.getTime();
+          console.log(`Parsed time for "${text}": ${time.toLocaleString()}`);
         }
 
         const item = {
@@ -532,7 +536,7 @@
           completed: false
         };
         saveItem(item);
-        transcription.textContent = `Saved as ${item.type}: ${text}`;
+        transcription.textContent = `Saved as ${item.type}: ${text}${reminderTime ? ` (Due: ${new Date(reminderTime).toLocaleString()})` : ''}`;
       }
 
       recordBtn.addEventListener('click', async () => {
@@ -604,7 +608,7 @@
             const text = event.results[0][0].transcript;
             const lowerText = text.toLowerCase();
             let reminderTime = null;
-            const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
+            const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)|\d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
             if (timeMatch) {
               let time;
               const now = new Date();
@@ -621,8 +625,8 @@
                 const unit = timeMatch[0].match(/hour|day|week/)[0];
                 const multiplier = { hour: 3600, day: 24 * 3600, week: 7 * 24 * 3600 }[unit];
                 time = new Date(now.getTime() + num * multiplier * 1000);
-              } else if (timeMatch[0].includes('at')) {
-                const timeStr = timeMatch[0].replace('at ', '').trim();
+              } else if (timeMatch[0].match(/\d{1,2}(?::\d{2})?\s*(a\.m\.|p\.m\.)/i)) {
+                const timeStr = timeMatch[0].trim();
                 time = new Date(`${now.toDateString()} ${timeStr}`);
                 if (isNaN(time.getTime())) {
                   time = new Date();
@@ -631,6 +635,7 @@
                 }
               }
               reminderTime = time.getTime();
+              console.log(`Parsed time for edit "${text}": ${time.toLocaleString()}`);
             }
             updateItem(id, text, reminderTime);
             recognition.stop();
