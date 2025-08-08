@@ -42,7 +42,9 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import * as transformers from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js';
+
     function init() {
       const loginPage = document.getElementById('loginPage');
       const mainPage = document.getElementById('mainPage');
@@ -106,7 +108,19 @@
         });
       }
 
-      status.textContent = 'Using regex-based classification for reminders.';
+      let classifier;
+      (async () => {
+        try {
+          classifier = await transformers.pipeline('text-classification', 'distilbert/distilbert-base-uncased-finetuned-sst-2-english', {
+            modelPath: 'onnx/model.onnx'
+          });
+          status.textContent = 'AI model loaded successfully';
+        } catch (err) {
+          console.error('Model loading error:', err);
+          status.textContent = 'AI model failed to load. Using regex-based classification.';
+          classifier = null;
+        }
+      })();
 
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/shadow-clone/sw.js').then(() => {
@@ -284,18 +298,21 @@
       }
 
       function scheduleReminders() {
-        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
-        stored.forEach(item => {
-          if (item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() && !item.completed) {
-            setTimeout(() => {
-              if (Notification.permission === 'granted' && document.visibilityState === 'visible') {
+        const checkReminders = () => {
+          const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+          const now = Date.now();
+          stored.forEach(item => {
+            if (item.type === 'reminder' && item.reminderTime && item.reminderTime <= now && !item.completed) {
+              if (Notification.permission === 'granted') {
                 new Notification('Reminder', { body: item.text });
                 audio.play().catch(err => console.error('Audio error:', err));
               }
               markAsCompleted(item.id);
-            }, item.reminderTime - Date.now());
-          }
-        });
+            }
+          });
+        };
+        checkReminders();
+        setInterval(checkReminders, 60 * 1000); // Check every minute
       }
 
       function saveItem(item) {
@@ -375,13 +392,21 @@
         updateItem(id, text, reminderTime, true);
       });
 
-      function processText(text) {
+      async function processText(text) {
         const lowerText = text.toLowerCase();
         let type = 'note';
         let reminderTime = null;
 
         if (lowerText.includes('remind') || lowerText.includes('schedule')) {
           type = 'reminder';
+        } else if (classifier) {
+          try {
+            const result = await classifier(lowerText);
+            type = result[0].label.includes('POSITIVE') ? 'reminder' : 'note';
+          } catch (err) {
+            console.error('AI processing error:', err);
+            type = lowerText.includes('remind') || lowerText.includes('schedule') ? 'reminder' : 'note';
+          }
         }
 
         const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);

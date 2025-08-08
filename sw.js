@@ -6,7 +6,8 @@ self.addEventListener('install', event => {
         '/shadow-clone/index.html',
         '/shadow-clone/styles.css',
         '/shadow-clone/icon.png',
-        '/shadow-clone/alert.mp3'
+        '/shadow-clone/alert.mp3',
+        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js'
       ];
       return Promise.all(
         urls.map(url =>
