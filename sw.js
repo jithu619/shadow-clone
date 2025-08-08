@@ -2,10 +2,13 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open('voice-pwa-cache').then(cache => {
       return cache.addAll([
-        'index.html',
-        'styles.css',
-        'icon.png',
-        'alert.mp3'
+        '/shadow-clone/',
+        '/shadow-clone/index.html',
+        '/shadow-clone/styles.css',
+        '/shadow-clone/icon.png',
+        '/shadow-clone/alert.mp3',
+        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js',
+        'https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/model.onnx'
       ]);
     })
   );
@@ -17,12 +20,4 @@ self.addEventListener('fetch', event => {
       return response || fetch(event.request);
     })
   );
-});
-
-self.addEventListener('push', event => {
-  const data = event.data.json();
-  self.registration.showNotification(data.title, {
-    body: data.body,
-    icon: 'icon.png'
-  });
 });

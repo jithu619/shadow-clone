@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Voice Assistant</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/shadow-clone/manifest.json">
   <meta name="theme-color" content="#3b82f6">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="/shadow-clone/styles.css">
 </head>
 <body>
   <div id="loginPage" class="container">
@@ -42,10 +42,8 @@
     </div>
   </div>
 
-  <!-- <script type="module">
-    import * as transformers from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.4/dist/transformers.min.js'; -->
-    <script type="module">
-      import * as transformers from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js';
+  <script type="module">
+    import * as transformers from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js';
 
     function init() {
       const loginPage = document.getElementById('loginPage');
@@ -75,9 +73,8 @@
       let recognition;
       let currentEmail = localStorage.getItem('currentEmail') || '';
       let currentOtp = '';
-      const audio = new Audio('alert.mp3');
+      const audio = new Audio('/shadow-clone/alert.mp3');
 
-      // Check secure context
       if (!window.isSecureContext) {
         loginStatus.textContent = 'Error: This app requires HTTPS or localhost.';
         sendOtpBtn.disabled = true;
@@ -86,9 +83,15 @@
         return;
       }
 
-      // Initialize Web Speech API
-      if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
+      navigator.permissions.query({ name: 'microphone' }).then(result => {
+        status.textContent = `Microphone permission: ${result.state}`;
+        if (result.state !== 'granted') {
+          status.textContent += ' Please allow microphone access.';
+        }
+      });
+
+      if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
@@ -100,36 +103,33 @@
         return;
       }
 
-      // Load HuggingFace model
-      let classifier;
-      (async () => {
-        try {
-          classifier = await transformers.pipeline('text-classification', 'optimum/distilbert-base-uncased-finetuned-sst-2-english');
-          status.textContent = 'AI model loaded';
-        } catch (err) {
-          status.textContent = 'Error loading AI model: ' + err.message;
-        }
-      })();
-
-      // Register service worker
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(() => {
-          console.log('Service Worker Registered');
-        }).catch(err => {
-          console.error('Service Worker Error:', err);
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().then(isPersisted => {
+          console.log(`Persistent storage: ${isPersisted}`);
         });
       }
 
-      // Check notification permission
-      async function checkNotificationPermission() {
-        if (Notification.permission === 'default') {
-          const result = await Notification.requestPermission();
-          return result === 'granted';
+      let classifier;
+      (async () => {
+        try {
+          classifier = await transformers.pipeline('text-classification', 'distilbert-base-uncased-finetuned-sst-2-english');
+          status.textContent = 'AI model loaded successfully';
+        } catch (err) {
+          console.error('Model loading error:', err);
+          status.textContent = 'AI model failed to load. Using regex-based classification.';
+          classifier = null;
         }
-        return Notification.permission === 'granted';
+      })();
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/shadow-clone/sw.js').then(() => {
+          console.log('Service Worker Registered');
+        }).catch(err => {
+          console.error('Service Worker Error:', err);
+          status.textContent = `Service Worker Error: ${err.message}`;
+        });
       }
 
-      // Login handling
       if (currentEmail) {
         loginPage.classList.add('hidden');
         mainPage.classList.remove('hidden');
@@ -199,43 +199,49 @@
       logoutBtn.addEventListener('click', () => {
         localStorage.removeItem('currentEmail');
         currentEmail = '';
-        loginPage.classList.add('hidden');
+        loginPage.classList.remove('hidden');
         mainPage.classList.add('hidden');
         items.innerHTML = '';
         emailInput.value = '';
         otpInput.value = '';
         otpSection.classList.add('hidden');
+        loginStatus.textContent = '';
       });
 
-      // Load stored items
       function loadItems(filter = 'all') {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
         items.innerHTML = '';
-        let filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
+        let filtered = [];
         if (filter === 'history') {
           filtered = stored.flatMap(item =>
-            item.editHistory.map(history => ({
+            (item.editHistory || []).map(history => ({
               ...item,
               text: history.text,
               reminderTime: history.reminderTime,
-              editedAt: history.editedAt
+              editedAt: history.editedAt,
+              isHistory: true
             }))
           );
+        } else {
+          filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
         }
         filtered.sort((a, b) => (b.editedAt || b.timestamp) - (a.editedAt || a.timestamp));
         filtered.forEach(item => {
           const div = document.createElement('div');
           div.className = 'item';
           div.innerHTML = `
-            <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}${item.editedAt ? ` (Edited: ${new Date(item.editedAt).toLocaleString()})` : ''}</span>
-            ${item.type === 'reminder' && !item.editedAt && item.reminderTime > Date.now() ? `
+            <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}${item.editedAt && item.isHistory ? ` (Edited: ${new Date(item.editedAt).toLocaleString()})` : ''}</span>
+            ${!item.isHistory ? `
               <div>
-                <button class="editReminder" data-id="${item.id}">Edit</button>
-                <button class="addToCalendar" data-id="${item.id}">Add to Calendar</button>
+                ${item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() ? `
+                  <button class="editReminder" data-id="${item.id}">Edit</button>
+                  <button class="addToCalendar" data-id="${item.id}">Add to Calendar</button>
+                ` : ''}
+                <button class="deleteItem" data-id="${item.id}">Delete</button>
               </div>` : ''}
           `;
           items.appendChild(div);
-          if (item.type === 'reminder' && item.reminderTime > Date.now()) {
+          if (item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() && !item.isHistory) {
             setTimeout(() => {
               if (Notification.permission === 'granted' && document.visibilityState === 'visible') {
                 new Notification('Reminder', { body: item.text });
@@ -245,11 +251,11 @@
           }
         });
 
-        // Edit reminder handlers
         document.querySelectorAll('.editReminder').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.dataset.id;
             const item = stored.find(i => i.id == id);
+            if (!item) return;
             editText.value = item.text;
             editTime.value = item.reminderTime ? new Date(item.reminderTime).toISOString().slice(0, 16) : '';
             editReminderForm.dataset.id = id;
@@ -258,12 +264,11 @@
           });
         });
 
-        // Calendar handlers
         document.querySelectorAll('.addToCalendar').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.dataset.id;
             const item = stored.find(i => i.id == id);
-            if (item.reminderTime) {
+            if (item && item.reminderTime) {
               const start = new Date(item.reminderTime);
               const end = new Date(start.getTime() + 30 * 60 * 1000);
               const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(item.text)}&dates=${start.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${end.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
@@ -271,24 +276,38 @@
             }
           });
         });
+
+        document.querySelectorAll('.deleteItem').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            deleteItem(id);
+          });
+        });
       }
 
-      // Save item to localStorage
       function saveItem(item) {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
-        item.editHistory = [];
+        item.editHistory = item.editHistory || [];
         stored.push(item);
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
       }
 
-      // Update reminder
+      function deleteItem(id) {
+        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+        const updated = stored.filter(item => item.id != id);
+        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(updated));
+        loadItems();
+        transcription.textContent = 'Item deleted';
+      }
+
       async function updateReminder(id, text, reminderTime, isManual = false) {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
         const item = stored.find(i => i.id == id);
         if (!item) return;
 
         if (!item.originalText) item.originalText = item.text;
+        item.editHistory = item.editHistory || [];
         item.editHistory.push({
           text: item.text,
           reminderTime: item.reminderTime,
@@ -313,7 +332,14 @@
         }
       }
 
-      // Manual edit handler
+      async function checkNotificationPermission() {
+        if (Notification.permission === 'default') {
+          const result = await Notification.requestPermission();
+          return result === 'granted';
+        }
+        return Notification.permission === 'granted';
+      }
+
       saveEditBtn.addEventListener('click', () => {
         const id = editReminderForm.dataset.id;
         const text = editText.value.trim();
@@ -325,13 +351,11 @@
         updateReminder(id, text, reminderTime, true);
       });
 
-      // Process text with AI
       async function processText(text) {
         const lowerText = text.toLowerCase();
         let type = 'note';
         let reminderTime = null;
 
-        // Check for "remind" keyword
         if (lowerText.includes('remind')) {
           type = 'reminder';
         } else if (classifier) {
@@ -339,11 +363,13 @@
             const result = await classifier(lowerText);
             type = result[0].label.includes('POSITIVE') ? 'reminder' : 'note';
           } catch (err) {
-            status.textContent = 'AI processing error: ' + err.message;
+            console.error('AI processing error:', err);
+            type = lowerText.includes('remind') ? 'reminder' : 'note';
           }
+        } else {
+          type = lowerText.includes('remind') ? 'reminder' : 'note';
         }
 
-        // Extract date/time
         const timeMatch = lowerText.match(/(at \d{1,2}(?::\d{2})?\s*(am|pm)|tomorrow|today|next \w+|in \d+\s*(hour|day|week))/i);
         if (timeMatch) {
           type = 'reminder';
@@ -379,7 +405,6 @@
         transcription.textContent = `Saved as ${item.type}: ${text}`;
       }
 
-      // Handle recording
       recordBtn.addEventListener('click', async () => {
         if (!isRecording) {
           const notificationsAvailable = await checkNotificationPermission();
@@ -390,6 +415,11 @@
           try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
             mediaRecorder.start();
             recognition.start();
 
@@ -406,6 +436,7 @@
 
             recognition.onerror = event => {
               status.textContent = `Speech recognition error: ${event.error}`;
+              console.error('Speech error:', event.error);
             };
 
             recognition.onend = () => {
@@ -418,8 +449,13 @@
                 status.textContent = '';
               }
             };
+
+            mediaRecorder.onstop = () => {
+              stream.getTracks().forEach(track => track.stop());
+            };
           } catch (err) {
             status.textContent = `Error accessing microphone: ${err.message}`;
+            console.error('Microphone error:', err);
           }
         } else {
           mediaRecorder.stop();
@@ -427,7 +463,6 @@
         }
       });
 
-      // Voice edit handler
       document.addEventListener('click', event => {
         if (event.target.classList.contains('editReminder')) {
           const id = event.target.dataset.id;
@@ -460,10 +495,13 @@
             updateReminder(id, text, reminderTime);
             recognition.stop();
           };
+          recognition.onerror = event => {
+            status.textContent = `Speech recognition error: ${event.error}`;
+            recognition.stop();
+          };
         }
       });
 
-      // Tab navigation
       allTab.addEventListener('click', () => {
         allTab.className = 'tab active';
         notesTab.className = 'tab';
@@ -493,11 +531,9 @@
         loadItems('history');
       });
 
-      // Load items on page load
       if (currentEmail) loadItems();
     }
 
-    // Initialize app
     init();
   </script>
 </body>
