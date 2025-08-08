@@ -47,6 +47,7 @@ self.addEventListener('push', event => {
       body: text,
       icon: '/shadow-clone/icon.png'
     }).then(() => {
+      console.log(`Push notification shown for ${id}`);
       self.clients.matchAll().then(clients => {
         clients.forEach(client => client.postMessage({ type: 'play-alert', id }));
       });

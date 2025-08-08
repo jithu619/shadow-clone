@@ -22,11 +22,10 @@ const vapidKeys = {
 };
 webpush.setVapidDetails(process.env.VAPID_EMAIL, vapidKeys.publicKey, vapidKeys.privateKey);
 
-// Store subscriptions and jobs (use a database in production)
+// Store subscriptions and jobs
 const subscriptions = {};
 const jobs = {};
 
-// Subscribe endpoint
 app.post('/subscribe-push', (req, res) => {
   const { email, subscription } = req.body;
   subscriptions[email] = subscription;
@@ -34,7 +33,6 @@ app.post('/subscribe-push', (req, res) => {
   res.json({ success: true });
 });
 
-// Schedule push notification
 app.post('/schedule-push', (req, res) => {
   const { email, text, reminderTime, id } = req.body;
   const subscription = subscriptions[email];
@@ -58,7 +56,6 @@ app.post('/schedule-push', (req, res) => {
   res.json({ success: true });
 });
 
-// OTP endpoints (placeholder)
 app.post('/send-otp', (req, res) => {
   res.json({ success: true, message: 'OTP sent' });
 });

@@ -134,6 +134,10 @@
 
       async function subscribeToPush(registration) {
         try {
+          if (Notification.permission !== 'granted') {
+            const result = await Notification.requestPermission();
+            if (result !== 'granted') throw new Error('Notification permission denied');
+          }
           const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: 'BCNLka-QuqlSMbRBdhSe0fAbolvzieCFappxgCssEBODDuoYDKfXmhQ9TXea7hLjYC8yd3ZtbgfoJjpvc_5yGUI' // Replace with your VAPID public key
@@ -237,7 +241,7 @@
       logoutBtn.addEventListener('click', () => {
         localStorage.removeItem('currentEmail');
         currentEmail = '';
-        loginPage.classList.remove('hidden');
+        loginPage.classList.add('hidden');
         mainPage.classList.add('hidden');
         items.innerHTML = '';
         emailInput.value = '';
@@ -334,22 +338,34 @@
 
       function scheduleReminders() {
         const checkReminders = () => {
-          console.log('Checking reminders:', new Date().toLocaleString());
-          const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
           const now = Date.now();
+          console.log('Checking reminders:', new Date(now).toLocaleString());
+          const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+          console.log('Stored items:', stored.map(item => ({
+            id: item.id,
+            text: item.text,
+            reminderTime: item.reminderTime ? new Date(item.reminderTime).toLocaleString() : null,
+            completed: item.completed
+          })));
           stored.forEach(item => {
-            if (item.type === 'reminder' && item.reminderTime && item.reminderTime <= now && !item.completed) {
+            if (item.type === 'reminder' && item.reminderTime && item.reminderTime <= now + 30000 && !item.completed) {
               if (Notification.permission === 'granted') {
+                console.log(`Triggering notification for ${item.text} (ID: ${item.id})`);
                 new Notification('Reminder', { body: item.text });
-                console.log('Playing alert.mp3 for', item.text);
-                audio.play().catch(err => console.error('Audio error:', err));
+                audio.play().catch(err => {
+                  console.error('Audio error:', err);
+                  status.textContent = `Audio error: ${err.message}`;
+                });
+              } else {
+                console.log(`Notification permission not granted for ${item.text}`);
+                status.textContent = 'Notification permission not granted.';
               }
               markAsCompleted(item.id);
             }
           });
         };
         checkReminders();
-        setInterval(checkReminders, 10 * 1000); // Check every 10 seconds
+        setInterval(checkReminders, 10 * 1000);
       }
 
       function saveItem(item) {
@@ -359,6 +375,7 @@
         stored.push(item);
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
+        console.log('Saved item:', { id: item.id, text: item.text, reminderTime: item.reminderTime ? new Date(item.reminderTime).toLocaleString() : null });
         if (item.type === 'reminder' && item.reminderTime && !item.completed) {
           fetch('https://shadow-clone.onrender.com/schedule-push', {
             method: 'POST',
@@ -381,7 +398,7 @@
       function deleteItem(id) {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
         const updated = stored.filter(item => item.id != id);
-        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
+        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(updated));
         loadItems();
         transcription.textContent = 'Item deleted';
       }
