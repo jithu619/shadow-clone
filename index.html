@@ -36,8 +36,8 @@
     </div>
     <div id="items"></div>
     <div id="editReminderForm" class="hidden">
-      <input id="editText" type="text" placeholder="Reminder text">
-      <input id="editTime" type="datetime-local">
+      <input id="editText" type="text" placeholder="Item text">
+      <input id="editTime" type="datetime-local" class="optional">
       <button id="saveEditBtn">Save</button>
     </div>
   </div>
@@ -112,7 +112,7 @@
       let classifier;
       (async () => {
         try {
-          classifier = await transformers.pipeline('text-classification', 'distilbert-base-uncased-finetuned-sst-2-english');
+          classifier = await transformers.pipeline('text-classification', 'distilbert/distilbert-base-uncased-finetuned-sst-2-english');
           status.textContent = 'AI model loaded successfully';
         } catch (err) {
           console.error('Model loading error:', err);
@@ -213,35 +213,44 @@
         items.innerHTML = '';
         let filtered = [];
         if (filter === 'history') {
-          filtered = stored.flatMap(item =>
-            (item.editHistory || []).map(history => ({
+          filtered = [
+            ...stored.filter(item => item.completed).map(item => ({
               ...item,
-              text: history.text,
-              reminderTime: history.reminderTime,
-              editedAt: history.editedAt,
-              isHistory: true
-            }))
-          );
+              isHistory: true,
+              completedAt: item.completedAt || item.timestamp
+            })),
+            ...stored.flatMap(item =>
+              (item.editHistory || []).map(history => ({
+                ...item,
+                text: history.text,
+                reminderTime: history.reminderTime,
+                editedAt: history.editedAt,
+                isHistory: true
+              }))
+            )
+          ];
         } else {
-          filtered = filter === 'all' ? stored : stored.filter(item => item.type === filter);
+          filtered = (filter === 'all' ? stored : stored.filter(item => item.type === filter))
+            .filter(item => !item.completed);
         }
-        filtered.sort((a, b) => (b.editedAt || b.timestamp) - (a.editedAt || a.timestamp));
+        filtered.sort((a, b) => (b.editedAt || b.completedAt || b.timestamp) - (a.editedAt || a.completedAt || a.timestamp));
         filtered.forEach(item => {
           const div = document.createElement('div');
           div.className = 'item';
           div.innerHTML = `
-            <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}${item.editedAt && item.isHistory ? ` (Edited: ${new Date(item.editedAt).toLocaleString()})` : ''}</span>
+            <span>${item.type.toUpperCase()}: ${item.text} (${new Date(item.timestamp).toLocaleString()})${item.reminderTime ? ` (Due: ${new Date(item.reminderTime).toLocaleString()})` : ''}${item.editedAt && item.isHistory ? ` (Edited: ${new Date(item.editedAt).toLocaleString()})` : ''}${item.completedAt && item.isHistory ? ` (Completed: ${new Date(item.completedAt).toLocaleString()})` : ''}</span>
             ${!item.isHistory ? `
               <div>
+                <button class="editItem" data-id="${item.id}">Edit</button>
                 ${item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() ? `
-                  <button class="editReminder" data-id="${item.id}">Edit</button>
                   <button class="addToCalendar" data-id="${item.id}">Add to Calendar</button>
                 ` : ''}
                 <button class="deleteItem" data-id="${item.id}">Delete</button>
+                <button class="completeItem" data-id="${item.id}">Mark as Completed</button>
               </div>` : ''}
           `;
           items.appendChild(div);
-          if (item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() && !item.isHistory) {
+          if (item.type === 'reminder' && item.reminderTime && item.reminderTime > Date.now() && !item.isHistory && !item.completed) {
             setTimeout(() => {
               if (Notification.permission === 'granted' && document.visibilityState === 'visible') {
                 new Notification('Reminder', { body: item.text });
@@ -251,13 +260,14 @@
           }
         });
 
-        document.querySelectorAll('.editReminder').forEach(btn => {
+        document.querySelectorAll('.editItem').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.dataset.id;
             const item = stored.find(i => i.id == id);
             if (!item) return;
             editText.value = item.text;
             editTime.value = item.reminderTime ? new Date(item.reminderTime).toISOString().slice(0, 16) : '';
+            editTime.classList.toggle('optional', item.type === 'note');
             editReminderForm.dataset.id = id;
             editReminderForm.classList.remove('hidden');
             items.classList.add('hidden');
@@ -283,11 +293,19 @@
             deleteItem(id);
           });
         });
+
+        document.querySelectorAll('.completeItem').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            markAsCompleted(id);
+          });
+        });
       }
 
       function saveItem(item) {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
         item.editHistory = item.editHistory || [];
+        item.completed = item.completed || false;
         stored.push(item);
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
@@ -301,7 +319,18 @@
         transcription.textContent = 'Item deleted';
       }
 
-      async function updateReminder(id, text, reminderTime, isManual = false) {
+      function markAsCompleted(id) {
+        const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
+        const item = stored.find(i => i.id == id);
+        if (!item) return;
+        item.completed = true;
+        item.completedAt = Date.now();
+        localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
+        loadItems();
+        transcription.textContent = `Item marked as completed: ${item.text}`;
+      }
+
+      async function updateItem(id, text, reminderTime, isManual = false) {
         const stored = JSON.parse(localStorage.getItem(`voiceItems_${currentEmail}`) || '[]');
         const item = stored.find(i => i.id == id);
         if (!item) return;
@@ -315,9 +344,10 @@
         });
         item.text = text;
         item.reminderTime = reminderTime;
+        item.type = reminderTime ? 'reminder' : 'note';
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
-        if (reminderTime && Notification.permission === 'granted') {
+        if (reminderTime && Notification.permission === 'granted' && !item.completed) {
           setTimeout(() => {
             if (document.visibilityState === 'visible') {
               new Notification('Reminder', { body: item.text });
@@ -325,7 +355,7 @@
             }
           }, item.reminderTime - Date.now());
         }
-        transcription.textContent = `Reminder updated: ${text}`;
+        transcription.textContent = `Item updated: ${text}`;
         if (isManual) {
           editReminderForm.classList.add('hidden');
           items.classList.remove('hidden');
@@ -343,12 +373,12 @@
       saveEditBtn.addEventListener('click', () => {
         const id = editReminderForm.dataset.id;
         const text = editText.value.trim();
-        const reminderTime = new Date(editTime.value).getTime();
-        if (!text || !reminderTime || reminderTime <= Date.now()) {
-          status.textContent = 'Invalid text or past date.';
+        const reminderTime = editTime.value ? new Date(editTime.value).getTime() : null;
+        if (!text) {
+          status.textContent = 'Text is required.';
           return;
         }
-        updateReminder(id, text, reminderTime, true);
+        updateItem(id, text, reminderTime, true);
       });
 
       async function processText(text) {
@@ -399,7 +429,8 @@
           timestamp: Date.now(),
           reminderTime,
           originalText: text,
-          editHistory: []
+          editHistory: [],
+          completed: false
         };
         saveItem(item);
         transcription.textContent = `Saved as ${item.type}: ${text}`;
@@ -464,9 +495,9 @@
       });
 
       document.addEventListener('click', event => {
-        if (event.target.classList.contains('editReminder')) {
+        if (event.target.classList.contains('editItem')) {
           const id = event.target.dataset.id;
-          status.textContent = 'Speak new reminder details...';
+          status.textContent = 'Speak new item details...';
           recognition.start();
           recognition.onresult = event => {
             const text = event.results[0][0].transcript;
@@ -492,7 +523,7 @@
               }
               reminderTime = time.getTime();
             }
-            updateReminder(id, text, reminderTime);
+            updateItem(id, text, reminderTime);
             recognition.stop();
           };
           recognition.onerror = event => {

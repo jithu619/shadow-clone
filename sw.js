@@ -1,15 +1,24 @@
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open('voice-pwa-cache').then(cache => {
-      return cache.addAll([
+      const urls = [
         '/shadow-clone/',
         '/shadow-clone/index.html',
         '/shadow-clone/styles.css',
         '/shadow-clone/icon.png',
         '/shadow-clone/alert.mp3',
-        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js',
-        'https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/model.onnx'
-      ]);
+        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js'
+      ];
+      return Promise.all(
+        urls.map(url =>
+          fetch(url)
+            .then(response => {
+              if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+              return cache.put(url, response);
+            })
+            .catch(err => console.warn(`Cache error for ${url}:`, err))
+        )
+      ).catch(err => console.error('Cache addAll error:', err));
     })
   );
 });
@@ -17,7 +26,10 @@ self.addEventListener('install', event => {
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request).then(response => {
-      return response || fetch(event.request);
+      return response || fetch(event.request).catch(err => {
+        console.error('Fetch error:', err);
+        return new Response('Offline', { status: 503 });
+      });
     })
   );
 });
