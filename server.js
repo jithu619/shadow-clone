@@ -1,7 +1,15 @@
 const express = require('express');
 const webpush = require('web-push');
 const schedule = require('node-schedule');
+const cors = require('cors');
 const app = express();
+
+// Enable CORS
+app.use(cors({
+  origin: 'https://jithu619.github.io',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(express.json());
 
 // Load environment variables
@@ -43,15 +51,13 @@ app.post('/schedule-push', (req, res) => {
   res.json({ success: true });
 });
 
-// OTP endpoints (from previous setup)
+// OTP endpoints (placeholder)
 app.post('/send-otp', (req, res) => {
-  // Your existing OTP logic
-  res.json({ success: true, message: 'OTP sent' }); // Placeholder
+  res.json({ success: true, message: 'OTP sent' });
 });
 
 app.post('/verify-otp', (req, res) => {
-  // Your existing OTP verification logic
-  res.json({ success: true }); // Placeholder
+  res.json({ success: true });
 });
 
 app.listen(3000, () => console.log('Server running on port 3000'));

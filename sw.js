@@ -6,18 +6,23 @@ self.addEventListener('install', event => {
         '/shadow-clone/index.html',
         '/shadow-clone/styles.css',
         '/shadow-clone/icon.png',
-        '/shadow-clone/alert.mp3',
-        'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js'
+        '/shadow-clone/alert.mp3'
       ];
       return Promise.all(
         urls.map(url =>
-          fetch(url)
+          fetch(url, { mode: 'no-cors' })
             .then(response => {
-              if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+              if (!response.ok) {
+                console.warn(`Cache warning: Failed to fetch ${url}`);
+                return null;
+              }
               return cache.put(url, response);
             })
-            .catch(err => console.warn(`Cache error for ${url}:`, err))
-        )
+            .catch(err => {
+              console.warn(`Cache error for ${url}:`, err);
+              return null;
+            })
+        ).filter(Boolean)
       ).catch(err => console.error('Cache addAll error:', err));
     })
   );
