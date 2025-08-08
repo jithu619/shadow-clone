@@ -33,3 +33,25 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+
+self.addEventListener('push', event => {
+  const data = event.data.json();
+  const { text, id } = data;
+  event.waitUntil(
+    self.registration.showNotification('Reminder', {
+      body: text,
+      icon: '/shadow-clone/icon.png'
+    }).then(() => {
+      // Attempt to play alert.mp3 via client messaging
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'play-alert', id }));
+      });
+    })
+  );
+});
+
+self.addEventListener('message', event => {
+  if (event.data.type === 'play-alert') {
+    // This is handled in index.html, not here
+  }
+});

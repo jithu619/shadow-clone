@@ -123,12 +123,31 @@
       })();
 
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/shadow-clone/sw.js').then(() => {
+        navigator.serviceWorker.register('/shadow-clone/sw.js').then(reg => {
           console.log('Service Worker Registered');
+          subscribeToPush(reg);
         }).catch(err => {
           console.error('Service Worker Error:', err);
           status.textContent = `Service Worker Error: ${err.message}`;
         });
+      }
+
+      async function subscribeToPush(registration) {
+        try {
+          const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: 'YOUR_VAPID_PUBLIC_KEY' // Replace with your VAPID public key
+          });
+          await fetch('https://shadow-clone.onrender.com/subscribe-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentEmail || 'guest', subscription })
+          });
+          console.log('Push subscription sent to server');
+        } catch (err) {
+          console.error('Push subscription error:', err);
+          status.textContent = 'Push notifications not enabled. Using in-app notifications.';
+        }
       }
 
       if (currentEmail) {
@@ -191,6 +210,7 @@
             loadItems();
             scheduleReminders();
             loginStatus.textContent = '';
+            navigator.serviceWorker.ready.then(reg => subscribeToPush(reg));
           } else {
             loginStatus.textContent = 'Invalid OTP.';
           }
@@ -245,7 +265,7 @@
             ${!item.isHistory ? `
               <div>
                 <button class="editItem" data-id="${item.id}">Edit</button>
-                ${item.type === 'reminder' && item.reminderTime ? `
+                ${item.type === 'reminder' ? `
                   <button class="addToCalendar" data-id="${item.id}">Add to Calendar</button>
                 ` : ''}
                 <button class="deleteItem" data-id="${item.id}">Delete</button>
@@ -273,8 +293,8 @@
           btn.addEventListener('click', () => {
             const id = btn.dataset.id;
             const item = stored.find(i => i.id == id);
-            if (item && item.reminderTime) {
-              const start = new Date(item.reminderTime);
+            if (item) {
+              const start = item.reminderTime ? new Date(item.reminderTime) : new Date();
               const end = new Date(start.getTime() + 30 * 60 * 1000);
               const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(item.text)}&dates=${start.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${end.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
               window.open(url, '_blank');
@@ -312,7 +332,7 @@
           });
         };
         checkReminders();
-        setInterval(checkReminders, 60 * 1000); // Check every minute
+        setInterval(checkReminders, 10 * 1000); // Check every 10 seconds
       }
 
       function saveItem(item) {
@@ -323,6 +343,11 @@
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
         if (item.type === 'reminder' && item.reminderTime && !item.completed) {
+          fetch('https://shadow-clone.onrender.com/schedule-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentEmail, text: item.text, reminderTime: item.reminderTime, id: item.id })
+          }).catch(err => console.error('Schedule push error:', err));
           scheduleReminders();
         }
       }
@@ -364,6 +389,11 @@
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
         if (reminderTime && Notification.permission === 'granted' && !item.completed) {
+          fetch('https://shadow-clone.onrender.com/schedule-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentEmail, text: item.text, reminderTime: item.reminderTime, id: item.id })
+          }).catch(err => console.error('Schedule push error:', err));
           scheduleReminders();
         }
         transcription.textContent = `Item updated: ${text}`;

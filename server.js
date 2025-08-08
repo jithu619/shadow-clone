@@ -1,63 +1,42 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
-const dotenv = require('dotenv');
-const cors = require('cors');
-
-dotenv.config();
+const webpush = require('web-push');
+const schedule = require('node-schedule');
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-// Root route for testing
-app.get('/', (req, res) => {
-  res.json({ message: 'Voice Assistant Backend is running' });
+// Replace with your VAPID keys
+const vapidKeys = {
+  publicKey: 'YOUR_VAPID_PUBLIC_KEY',
+  privateKey: 'YOUR_VAPID_PRIVATE_KEY'
+};
+webpush.setVapidDetails('mailto:your-email@example.com', vapidKeys.publicKey, vapidKeys.privateKey);
+
+// Store subscriptions (use a database in production)
+const subscriptions = {};
+
+// Store scheduled jobs
+const jobs = {};
+
+// Subscribe endpoint
+app.post('/subscribe-push', (req, res) => {
+  const { email, subscription } = req.body;
+  subscriptions[email] = subscription;
+  res.json({ success: true });
 });
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+// Schedule push notification
+app.post('/schedule-push', (req, res) => {
+  const { email, text, reminderTime, id } = req.body;
+  const subscription = subscriptions[email];
+  if (!subscription) {
+    return res.json({ success: false, message: 'No subscription found' });
   }
+  const job = schedule.scheduleJob(new Date(reminderTime), () => {
+    webpush.sendNotification(subscription, JSON.stringify({ text, id }))
+      .catch(err => console.error('Push error:', err));
+  });
+  jobs[id] = job;
+  res.json({ success: true });
 });
 
-const otps = {};
-
-app.post('/send-otp', async (req, res) => {
-  const { email } = req.body;
-  if (!email || !email.includes('@')) {
-    return res.json({ success: false, message: 'Invalid email.' });
-  }
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otps[email] = otp;
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Your OTP for Voice Assistant',
-    text: `Your OTP is ${otp}. It expires in 10 minutes.`
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true, otp });
-  } catch (err) {
-    res.json({ success: false, message: err.message });
-  }
-});
-
-app.post('/verify-otp', (req, res) => {
-  const { email, otp } = req.body;
-  if (otps[email] === otp) {
-    delete otps[email];
-    res.json({ success: true });
-  } else {
-    res.json({ success: false, message: 'Invalid OTP.' });
-  }
-});
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Server running on port ' + (process.env.PORT || 3000));
-});
+app.listen(3000, () => console.log('Server running on port 3000'));
