@@ -136,7 +136,7 @@
         try {
           const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: 'YOUR_VAPID_PUBLIC_KEY' // Replace with your VAPID public key
+            applicationServerKey: 'BCNLka-QuqlSMbRBdhSe0fAbolvzieCFappxgCssEBODDuoYDKfXmhQ9TXea7hLjYC8yd3ZtbgfoJjpvc_5yGUI' // Replace with your VAPID public key
           });
           await fetch('https://shadow-clone.onrender.com/subscribe-push', {
             method: 'POST',
@@ -149,6 +149,15 @@
           status.textContent = 'Push notifications not enabled. Using in-app notifications.';
         }
       }
+
+      // Handle messages from service worker to play alert.mp3
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data.type === 'play-alert') {
+          audio.play().catch(err => console.error('Audio error:', err));
+          const id = event.data.id;
+          markAsCompleted(id);
+        }
+      });
 
       if (currentEmail) {
         loginPage.classList.add('hidden');
@@ -325,6 +334,7 @@
             if (item.type === 'reminder' && item.reminderTime && item.reminderTime <= now && !item.completed) {
               if (Notification.permission === 'granted') {
                 new Notification('Reminder', { body: item.text });
+                console.log('Playing alert.mp3');
                 audio.play().catch(err => console.error('Audio error:', err));
               }
               markAsCompleted(item.id);

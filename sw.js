@@ -42,7 +42,6 @@ self.addEventListener('push', event => {
       body: text,
       icon: '/shadow-clone/icon.png'
     }).then(() => {
-      // Attempt to play alert.mp3 via client messaging
       self.clients.matchAll().then(clients => {
         clients.forEach(client => client.postMessage({ type: 'play-alert', id }));
       });
@@ -52,6 +51,6 @@ self.addEventListener('push', event => {
 
 self.addEventListener('message', event => {
   if (event.data.type === 'play-alert') {
-    // This is handled in index.html, not here
+    // Handled in index.html
   }
 });

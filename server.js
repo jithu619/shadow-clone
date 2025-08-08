@@ -4,23 +4,25 @@ const schedule = require('node-schedule');
 const app = express();
 app.use(express.json());
 
-// Replace with your VAPID keys
+// Load environment variables
+require('dotenv').config();
+
+// VAPID configuration
 const vapidKeys = {
-  publicKey: 'YOUR_VAPID_PUBLIC_KEY',
-  privateKey: 'YOUR_VAPID_PRIVATE_KEY'
+  publicKey: process.env.VAPID_PUBLIC_KEY,
+  privateKey: process.env.VAPID_PRIVATE_KEY
 };
-webpush.setVapidDetails('mailto:your-email@example.com', vapidKeys.publicKey, vapidKeys.privateKey);
+webpush.setVapidDetails(process.env.VAPID_EMAIL, vapidKeys.publicKey, vapidKeys.privateKey);
 
-// Store subscriptions (use a database in production)
+// Store subscriptions and jobs (use a database in production)
 const subscriptions = {};
-
-// Store scheduled jobs
 const jobs = {};
 
 // Subscribe endpoint
 app.post('/subscribe-push', (req, res) => {
   const { email, subscription } = req.body;
   subscriptions[email] = subscription;
+  console.log(`Subscribed ${email}`);
   res.json({ success: true });
 });
 
@@ -34,9 +36,22 @@ app.post('/schedule-push', (req, res) => {
   const job = schedule.scheduleJob(new Date(reminderTime), () => {
     webpush.sendNotification(subscription, JSON.stringify({ text, id }))
       .catch(err => console.error('Push error:', err));
+    delete jobs[id];
   });
   jobs[id] = job;
+  console.log(`Scheduled push for ${id} at ${new Date(reminderTime)}`);
   res.json({ success: true });
+});
+
+// OTP endpoints (from previous setup)
+app.post('/send-otp', (req, res) => {
+  // Your existing OTP logic
+  res.json({ success: true, message: 'OTP sent' }); // Placeholder
+});
+
+app.post('/verify-otp', (req, res) => {
+  // Your existing OTP verification logic
+  res.json({ success: true }); // Placeholder
 });
 
 app.listen(3000, () => console.log('Server running on port 3000'));
