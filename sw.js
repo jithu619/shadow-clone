@@ -50,7 +50,7 @@ self.addEventListener('push', event => {
       self.clients.matchAll().then(clients => {
         clients.forEach(client => client.postMessage({ type: 'play-alert', id }));
       });
-    })
+    }).catch(err => console.error('Notification error:', err))
   );
 });
 
