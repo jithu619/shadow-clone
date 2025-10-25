@@ -67,3 +67,5 @@ app.post('/send-otp', (req, res) => {
 app.post('/verify-otp', (req, res) => {
   res.json({ success: true });
 });
+
+app.listen(3000, () => console.log('Server running on port 3000'));
