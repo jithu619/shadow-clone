@@ -51,7 +51,7 @@ app.post('/send-otp', async (req, res) => {
 
   try {
     await resend.emails.send({
-      from: 'Voice Assistant <otp@yourdomain.com>', // Change to your verified sender
+      from: 'Voice Assistant <onboarding@resend.dev>', // Change to your verified sender
       to: [email],
       subject: 'Your OTP Code',
       html: `
