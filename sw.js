@@ -2,11 +2,11 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open('voice-pwa-cache').then(cache => {
       const urls = [
-        '/shadow-clone/',
-        '/shadow-clone/index.html',
-        '/shadow-clone/styles.css',
-        '/shadow-clone/icon.png',
-        '/shadow-clone/alert.mp3'
+        '',
+        'index.html',
+        'styles.css',
+        'icon.png',
+        'alert.mp3'
       ];
       return Promise.all(
         urls.map(url =>
@@ -45,7 +45,7 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification('Reminder', {
       body: text,
-      icon: '/shadow-clone/icon.png'
+      icon: 'icon.png'
     }).then(() => {
       console.log(`Push notification shown for ${id}`);
       self.clients.matchAll().then(clients => {
