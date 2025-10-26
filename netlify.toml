@@ -1,7 +1,14 @@
+# netlify.toml
+
+[build]
+  publish = "."
+
 [functions]
+  directory = "functions"
   node_bundler = "esbuild"
-  external_node_modules = ["web-push", "resend"]
-  node_version18 = true
+
+  [functions.node_version18]
+    external_node_modules = ["web-push", "resend"]
 
 [[redirects]]
   from = "/api/*"
