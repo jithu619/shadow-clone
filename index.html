@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Voice Assistant</title>
-  <link rel="manifest" href="/shadow-clone/manifest.json">
+  <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#3b82f6">
-  <link rel="stylesheet" href="/shadow-clone/styles.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="loginPage" class="container">
@@ -72,7 +72,7 @@
       let mediaRecorder;
       let recognition;
       let currentEmail = localStorage.getItem('currentEmail') || '';
-      const audio = new Audio('/shadow-clone/alert.mp3');
+      const audio = new Audio('alert.mp3');
 
       if (!window.isSecureContext) {
         loginStatus.textContent = 'Error: This app requires HTTPS or localhost.';
@@ -126,7 +126,7 @@
       })();
 
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/shadow-clone/sw.js').then(reg => {
+        navigator.serviceWorker.register('sw.js').then(reg => {
           console.log('Service Worker Registered');
           subscribeToPush(reg);
         }).catch(err => {
