@@ -189,7 +189,7 @@
           return;
         }
         try {
-          const response = await fetch('https://shadow-clone.netlify.app/send-otp', {
+          const response = await fetch('https://shadow-clone.netlify.app/api/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email })
