@@ -71,5 +71,5 @@ app.post('/schedule-push', (req, res) => {
   res.json({ success: true });
 });
 
-// Export for Netlify
+// CRITICAL: Export handler
 module.exports.handler = serverless(app);
