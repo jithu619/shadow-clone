@@ -1,0 +1,9 @@
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["web-push", "resend"]
+  node_version18 = true
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/server"
+  status = 200
