@@ -145,7 +145,7 @@
             userVisibleOnly: true,
             applicationServerKey: 'BCNLka-QuqlSMbRBdhSe0fAbolvzieCFappxgCssEBODDuoYDKfXmhQ9TXea7hLjYC8yd3ZtbgfoJjpvc_5yGUI' // Replace with your VAPID public key
           });
-          const response = await fetch('https://shadow-clone.netlify.app/subscribe-push', {
+          const response = await fetch('https://shadow-clone.netlify.app/api/subscribe-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentEmail || 'guest', subscription })
@@ -218,7 +218,7 @@
       verifyOtpBtn.addEventListener('click', async () => {
         const otp = otpInput.value.trim();
         try {
-          const response = await fetch('https://shadow-clone.netlify.app/verify-otp', {
+          const response = await fetch('https://shadow-clone.netlify.app/api/verify-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: emailInput.value.trim(), otp })
@@ -380,7 +380,7 @@
         loadItems();
         console.log('Saved item:', { id: item.id, text: item.text, reminderTime: item.reminderTime ? new Date(item.reminderTime).toLocaleString() : null });
         if (item.type === 'reminder' && item.reminderTime && !item.completed) {
-          fetch('https://shadow-clone.netlify.app/schedule-push', {
+          fetch('https://shadow-clone.netlify.app/api/schedule-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentEmail, text: item.text, reminderTime: item.reminderTime, id: item.id })
@@ -435,7 +435,7 @@
         localStorage.setItem(`voiceItems_${currentEmail}`, JSON.stringify(stored));
         loadItems();
         if (reminderTime && Notification.permission === 'granted' && !item.completed) {
-          fetch('https://shadow-clone.netlify.app/schedule-push', {
+          fetch('https://shadow-clone.netlify.app/api/schedule-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: currentEmail, text: item.text, reminderTime: item.reminderTime, id: item.id })
